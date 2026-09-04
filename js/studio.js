@@ -77,7 +77,7 @@
     trackCount: 26,
     trackLines: 60,
     trackLabels: 60,
-    trackDim: 85,
+    trackDim: 0,
     bg: "#0b0e11",
     transparentBg: false,
     fmt: "png"
