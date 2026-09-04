@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" type="image/svg+xml" href="fav.svg">
+  <title>xtal ★ studio</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body data-theme="dark">
+  <main id="app">
+    <section id="stageWrap" aria-label="Результат">
+      <div id="stage"></div>
+      <div id="stageHint">Перетащите файл — колесо: зум, драг: панорама</div>
+      <div id="meta" aria-live="polite">—</div>
+    </section>
+
+    <aside id="panel" aria-label="Настройки">
+      <div id="panelScroll">
+
+        <header class="panel-head">
+          <img src="logo-dark.svg" alt="Xtal Studio" class="logo-dark">
+          <img src="logo-light.svg" alt="Xtal Studio" class="logo-light">
+          <span class="ver">v4.9.0</span>
+          <button type="button" id="themeToggle" class="icon-btn" title="Переключить тему">☀</button>
+        </header>
+
+        <section class="group">
+          <h2>Источник</h2>
+          <div id="dropzone" tabindex="0" role="button" aria-label="Загрузить файл">
+            <span class="dz-ico" aria-hidden="true">⇪</span>
+            <span class="dz-main">Перетащите файл или нажмите</span>
+            <span id="srcName" class="dz-file">Файл не выбран</span>
+          </div>
+          <input type="file" id="fileInput" accept="image/*,video/*" hidden>
+        </section>
+
+        <section class="group">
+          <h2>Эффект</h2>
+          <div class="seg" id="effectSeg" role="group" aria-label="Выбор эффекта">
+            <button type="button" data-effect="ascii" class="seg-btn active">ASCII</button>
+            <button type="button" data-effect="dots" class="seg-btn">DOTS</button>
+            <button type="button" data-effect="mosh" class="seg-btn">MOSH</button>
+            <button type="button" data-effect="track" class="seg-btn">TRACK</button>
+          </div>
+        </section>
+
+        <section class="group">
+          <h2>Параметры</h2>
+
+          <div id="optDensity">
+            <div class="slider">
+              <label for="cols">Плотность <output id="cols-val">120</output></label>
+              <input type="range" id="cols" min="24" max="220" step="4" value="120">
+            </div>
+          </div>
+
+          <div id="asciiOpts">
+            <div class="slider">
+              <label for="charScale">Размер <output id="charScale-val">1.00</output></label>
+              <input type="range" id="charScale" min="0.5" max="1.5" step="0.05" value="1">
+            </div>
+          </div>
+
+          <div id="dotsOpts" style="display:none">
+            <div class="slider">
+              <label for="dotScale">Размер <output id="dotScale-val">1.00</output></label>
+              <input type="range" id="dotScale" min="0.3" max="1.5" step="0.05" value="1">
+            </div>
+          </div>
+
+          <div id="moshOpts" style="display:none">
+            <div class="slider">
+              <label for="moshLevel">Сила <output id="moshLevel-val">25</output></label>
+              <input type="range" id="moshLevel" min="0" max="100" step="1" value="25">
+            </div>
+            <div class="slider">
+              <label for="moshScale">Масштаб <output id="moshScale-val">16</output></label>
+              <input type="range" id="moshScale" min="8" max="32" step="4" value="16">
+            </div>
+            <div class="slider">
+              <label for="moshBleed">Разводы <output id="moshBleed-val">50</output></label>
+              <input type="range" id="moshBleed" min="0" max="100" step="1" value="50">
+            </div>
+            <div class="slider">
+              <label for="moshMelt">Melt <output id="moshMelt-val">30</output></label>
+              <input type="range" id="moshMelt" min="0" max="100" step="1" value="30">
+            </div>
+            <div class="slider">
+              <label for="moshFocusX">Фокус X <output id="moshFocusX-val">50</output></label>
+              <input type="range" id="moshFocusX" min="0" max="100" step="1" value="50">
+            </div>
+            <div class="slider">
+              <label for="moshFocusY">Фокус Y <output id="moshFocusY-val">50</output></label>
+              <input type="range" id="moshFocusY" min="0" max="100" step="1" value="50">
+            </div>
+            <div class="slider">
+              <label for="moshFocusRadius">Радиус <output id="moshFocusRadius-val">100</output></label>
+              <input type="range" id="moshFocusRadius" min="0" max="100" step="1" value="100">
+            </div>
+          </div>
+
+          <div id="trackOpts" style="display:none">
+            <div class="slider">
+              <label for="trackCount">Точки <output id="trackCount-val">26</output></label>
+              <input type="range" id="trackCount" min="6" max="70" step="2" value="26">
+            </div>
+            <div class="slider">
+              <label for="trackLines">Связи <output id="trackLines-val">60</output></label>
+              <input type="range" id="trackLines" min="0" max="100" step="5" value="60">
+            </div>
+            <div class="slider">
+              <label for="trackLabels">Подписи <output id="trackLabels-val">60</output></label>
+              <input type="range" id="trackLabels" min="0" max="100" step="5" value="60">
+            </div>
+            <div class="slider">
+              <label for="trackDim">Фон <output id="trackDim-val">85</output></label>
+              <input type="range" id="trackDim" min="0" max="100" step="5" value="85">
+            </div>
+          </div>
+
+          <div id="optTone">
+            <div class="slider">
+              <label for="brightness">Яркость <output id="brightness-val">0</output></label>
+              <input type="range" id="brightness" min="-100" max="100" step="5" value="0">
+            </div>
+            <div class="slider">
+              <label for="contrast">Контраст <output id="contrast-val">100</output></label>
+              <input type="range" id="contrast" min="0" max="200" step="5" value="100">
+            </div>
+            <div class="slider">
+              <label for="gamma">Гамма <output id="gamma-val">1.0</output></label>
+              <input type="range" id="gamma" min="0.2" max="3" step="0.1" value="1">
+            </div>
+            <label class="toggle-row">
+              <span class="t-label">Инверсия</span>
+              <span class="switch"><input type="checkbox" id="invert"><span class="sw"></span></span>
+            </label>
+          </div>
+
+          <div id="optGlow">
+            <div class="slider">
+              <label for="glow">Glow <output id="glow-val">40</output></label>
+              <input type="range" id="glow" min="0" max="100" step="5" value="40">
+            </div>
+          </div>
+
+          <div id="optColor">
+            <label class="toggle-row">
+              <span class="t-label">Один цвет</span>
+              <span class="switch"><input type="checkbox" id="oneColor" checked><span class="sw"></span></span>
+            </label>
+            <div class="row2">
+              <label for="fgColor">Цвет фигур <input type="color" id="fgColor" value="#ffffff"></label>
+              <label for="bgColor">Фон <input type="color" id="bgColor" value="#000000"></label>
+            </div>
+            <label class="toggle-row">
+              <span class="t-label">Прозрачный фон</span>
+              <span class="switch"><input type="checkbox" id="transpBg"><span class="sw"></span></span>
+            </label>
+          </div>
+        </section>
+
+
+        <section class="group">
+          <h2 class="cap">Экспорт</h2>
+          <div class="fmt-grid" role="group" aria-label="Формат">
+            <button type="button" data-fmt="png" class="fmt-btn active">PNG</button>
+            <button type="button" data-fmt="svg" class="fmt-btn">SVG</button>
+            <button type="button" data-fmt="gif" class="fmt-btn">GIF</button>
+            <button type="button" data-fmt="mp4" class="fmt-btn">MP4</button>
+          </div>
+
+          <div id="pngOpts" class="row">
+            <select id="scaleSel" aria-label="Масштаб PNG">
+              <option value="0.5">0.5x</option>
+              <option value="1" selected>1x</option>
+              <option value="2">2x</option>
+            </select>
+          </div>
+
+          <div id="gifOpts" style="display:none">
+            <div class="row">
+              <select id="gifQuality" aria-label="Качество GIF">
+                <option value="low">Низкое</option>
+                <option value="med" selected>Среднее</option>
+                <option value="max">Максимальное</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="vidOpts" style="display:none">
+            <div class="row">
+              <select id="vidQuality" aria-label="Качество видео">
+                <option value="low">Низкое</option>
+                <option value="med" selected>Среднее</option>
+                <option value="max">Максимальное</option>
+              </select>
+            </div>
+          </div>
+
+          <p id="exportInfo" class="hint">Размер: —</p>
+          <button type="button" id="btnExport" class="btn-export">Экспорт</button>
+        </section>
+
+        <footer class="panel-foot"><span>Xtal Studio · v4.9.0</span></footer>
+      </div>
+    </aside>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+  </main>
+
+  <script src="js/engine.js"></script>
+  <script src="js/studio.js"></script>
+</body>
+</html>
