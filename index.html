@@ -133,10 +133,6 @@
               <label for="gamma">Гамма <output id="gamma-val">1.0</output></label>
               <input type="range" id="gamma" min="0.2" max="3" step="0.1" value="1">
             </div>
-            <label class="toggle-row">
-              <span class="t-label">Инверсия</span>
-              <span class="switch"><input type="checkbox" id="invert"><span class="sw"></span></span>
-            </label>
           </div>
 
           <div id="optGlow">
@@ -148,17 +144,21 @@
 
           <div id="optColor">
             <label class="toggle-row">
+              <span class="t-label">Инверсия</span>
+              <span class="switch"><input type="checkbox" id="invert"><span class="sw"></span></span>
+            </label>
+            <label class="toggle-row">
               <span class="t-label">Один цвет</span>
               <span class="switch"><input type="checkbox" id="oneColor" checked><span class="sw"></span></span>
+            </label>
+            <label class="toggle-row">
+              <span class="t-label">Прозрачный фон</span>
+              <span class="switch"><input type="checkbox" id="transpBg"><span class="sw"></span></span>
             </label>
             <div class="row2">
               <label for="fgColor">Цвет фигур <input type="color" id="fgColor" value="#ffffff"></label>
               <label for="bgColor">Фон <input type="color" id="bgColor" value="#000000"></label>
             </div>
-            <label class="toggle-row">
-              <span class="t-label">Прозрачный фон</span>
-              <span class="switch"><input type="checkbox" id="transpBg"><span class="sw"></span></span>
-            </label>
           </div>
         </section>
 
