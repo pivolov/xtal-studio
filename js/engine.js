@@ -48,7 +48,7 @@
     dotScale: 1, dotShape: "circle",
     moshLevel: 25, moshScale: 16, moshBleed: 50, moshMelt: 30,
     moshFocusX: 50, moshFocusY: 50, moshFocusRadius: 100,
-    trackCount: 26, trackLines: 60, trackLabels: 60, trackDim: 85,
+    trackCount: 26, trackLines: 60, trackLabels: 60, trackDim: 0,
     bg: "#0b0e11", transparentBg: false
   };
 
@@ -392,6 +392,8 @@
     for (var k in p) this.p[k] = p[k];
     if (this._mosh) this._mosh.dirty = true;
     this._render();
+    if (this._needsAnim()) this._startLoop();
+    else this._stopLoop();
   };
   P.play = function () { this.playing = true; this._startLoop(); };
   P.pause = function () { this.playing = false; this._stopLoop(); this._render(); };
@@ -612,13 +614,13 @@
     }
   };
 
-  /* ================= TRACK ================= */
-  P._trackEnergy = function (gray, lw, lh) {
-    var e = new Float32Array(lw * lh);
-    for (var y = 1; y < lh - 1; y++)
-      for (var x = 1; x < lw - 1; x++) {
-        var i = y * lw + x;
-        e[i] = Math.abs(gray[i + 1] - gray[i - 1]) + Math.abs(gray[i + lw] - gray[i - lw]);
+  /* ---------- TRACK ---------- */
+  P._trackEnergy = function (gray, w, h) {
+    var e = new Float32Array(w * h);
+    for (var y = 1; y < h - 1; y++)
+      for (var x = 1; x < w - 1; x++) {
+        var i = y * w + x;
+        e[i] = Math.abs(gray[i + 1] - gray[i - 1]) + Math.abs(gray[i + w] - gray[i - w]);
       }
     return e;
   };
@@ -633,7 +635,7 @@
     return s;
   };
 
-  P._trackDetect = function (tr) {
+  P._trackReset = function (tr) {
     tr.trackers = [];
     tr.links = [];
     tr.nextId = 1;
@@ -641,52 +643,78 @@
   };
 
   P._trackFlow = function (tr, gray, fw, fh) {
-    var prev = tr.prevGray;
-    if (!tr.trackers) this._trackDetect(tr);
-    if (!prev) return; 
+    if (!tr.trackers) this._trackReset(tr);
 
+    var prev = tr.prevGray;
     var cell = 4, R = 4, HP = 2;
     var gw = Math.ceil(fw / cell), gh = Math.ceil(fh / cell);
     if (!tr.flowX || tr.flowX.length !== gw * gh) {
       tr.flowX = new Float32Array(gw * gh);
       tr.flowY = new Float32Array(gw * gh);
     }
-    var fx = tr.flowX, fy = tr.flowY;
-    for (var cy = 0; cy < gh; cy++) {
-      for (var cx = 0; cx < gw; cx++) {
-        var x0 = cx * cell + 2, y0 = cy * cell + 2;
-        var gi = cy * gw + cx;
-        if (x0 < HP+1 || y0 < HP+1 || x0 > fw-HP-2 || y0 > fh-HP-2) { fx[gi]=0; fy[gi]=0; continue; }
-        var best = 1e9, bx = 0, by = 0;
-        for (var dy = -R; dy <= R; dy++) {
-          var yy = y0 + dy; if (yy < HP+1 || yy > fh-HP-2) continue;
-          for (var dx = -R; dx <= R; dx++) {
-            var xx = x0 + dx; if (xx < HP+1 || xx > fw-HP-2) continue;
-            var s = 0;
-            for (var py = -HP; py <= HP; py++) {
-              var rn = (yy+py)*fw, ro = (y0+py)*fw;
-              for (var px = -HP; px <= HP; px++) s += Math.abs(gray[rn+xx+px] - prev[ro+x0+px]);
-            }
-            if (s < best) { best = s; bx = dx; by = dy; }
+    var fx = tr.flowX, fy = tr.flowY, i;
+
+    /* Optical flow: only when a previous frame exists. */
+    if (prev) {
+      for (var cy = 0; cy < gh; cy++) {
+        for (var cx = 0; cx < gw; cx++) {
+          var x0 = cx * cell + 2, y0 = cy * cell + 2;
+          var gi = cy * gw + cx;
+          if (x0 < HP + 1 || y0 < HP + 1 || x0 > fw - HP - 2 || y0 > fh - HP - 2) {
+            fx[gi] = 0; fy[gi] = 0; continue;
           }
+          var best = 1e9, bx = 0, by = 0;
+          for (var dy = -R; dy <= R; dy++) {
+            var yy = y0 + dy;
+            if (yy < HP + 1 || yy > fh - HP - 2) continue;
+            for (var dx = -R; dx <= R; dx++) {
+              var xx = x0 + dx;
+              if (xx < HP + 1 || xx > fw - HP - 2) continue;
+              var err = 0;
+              for (var py = -HP; py <= HP; py++) {
+                var rn = (yy + py) * fw, ro = (y0 + py) * fw;
+                for (var px = -HP; px <= HP; px++)
+                  err += Math.abs(gray[rn + xx + px] - prev[ro + x0 + px]);
+              }
+              if (err < best) { best = err; bx = dx; by = dy; }
+            }
+          }
+          fx[gi] = bx; fy[gi] = by;
         }
-        fx[gi] = bx; fy[gi] = by;
       }
+    } else {
+      fx.fill(0); fy.fill(0);
     }
 
+    /* Bright/contrasty score. */
     var score = this._trackScore(gray, fw, fh);
-    var frameMax = 1;
-    for (var i = 0; i < score.length; i++) if (score[i] > frameMax) frameMax = score[i];
+    var now = this._time * 1000;
+    var total = fw * fh, sum = 0, hot = 0;
+    for (i = 0; i < total; i++) {
+      sum += score[i];
+      if (gray[i] > 185) hot++;
+    }
+    var meanScore = sum / total;
+    var activity = clamp((hot / total) * 7 + meanScore / 95, 0, 1);
 
-    var dt = 0.033, alive = [];
+    /* Top candidates are refreshed often enough to react to flashes. */
+    if (!tr.topCells || now - (tr.lastTop || 0) > 120) {
+      tr.lastTop = now;
+      var idx = [];
+      for (i = 0; i < total; i++) idx.push(i);
+      idx.sort(function (a, b) { return score[b] - score[a]; });
+      tr.topCells = idx.slice(0, 80);
+    }
+
+    var dt = tr.prevTime ? Math.min(0.06, Math.max(0.016, (now - tr.prevTime) / 1000)) : 0.016;
+    var alive = [];
     for (i = 0; i < tr.trackers.length; i++) {
       var t = tr.trackers[i];
-      var c2 = clamp(Math.floor(t.y/cell),0,gh-1)*gw + clamp(Math.floor(t.x/cell),0,gw-1);
-      t.x = clamp(t.x + fx[c2], 1, fw-2);
-      t.y = clamp(t.y + fy[c2], 1, fh-2);
+      var c2 = clamp(Math.floor(t.y / cell), 0, gh - 1) * gw + clamp(Math.floor(t.x / cell), 0, gw - 1);
+      t.x = clamp(t.x + fx[c2], 1, fw - 2);
+      t.y = clamp(t.y + fy[c2], 1, fh - 2);
       t.age += dt;
-      var ain = Math.min(1, t.age/0.15), aout = Math.min(1, (t.life-t.age)/0.3);
-      t.alpha = Math.max(0, Math.min(ain, aout));
+      t.alpha = Math.max(0, Math.min(Math.min(1, t.age / 0.15), Math.min(1, (t.life - t.age) / 0.3)));
       if (t.age < t.life) alive.push(t);
     }
     tr.trackers = alive;
@@ -698,27 +726,53 @@
     }
     tr.links = links;
 
-    var target = Math.round(clamp(this.p.trackCount, 4, 80));
-    var attempts = 0;
-    while (tr.trackers.length < target && attempts < 50) {
-      attempts++;
-      var ri = Math.floor(jrnd(attempts*3.3 + tr.spawnSeed*7.7) * fw * fh);
-      if (score[ri] < frameMax * 0.18) continue;
-      var nx = ri % fw, ny = (ri / fw) | 0;
-      var t2 = { x:nx, y:ny, sx:nx, sy:ny, age:0,
-                 life: 0.6 + jrnd(ri + tr.spawnSeed) * 1.2,
-                 size: 0.6 + jrnd(ri*1.7 + tr.spawnSeed) * 1.2,
-                 id: tr.nextId++, alpha: 0 };
-      if (tr.trackers.length > 0) {
-        var other = tr.trackers[Math.floor(jrnd(t2.id*13.7) * tr.trackers.length)];
-        tr.links.push({ a: t2, b: other });
-        if (jrnd(t2.id*7.1) > 0.5) {
-          var o2 = tr.trackers[Math.floor(jrnd(t2.id*3.1) * tr.trackers.length)];
-          if (o2 !== other) tr.links.push({ a: t2, b: o2 });
-        }
+    /* Density follows image activity. In darkness the overlay nearly disappears. */
+    var baseTarget = Math.round(clamp(this.p.trackCount, 4, 80));
+    var target = Math.round(baseTarget * Math.pow(activity, 0.72));
+    if (activity < 0.035) target = 0;
+
+    var spawned = 0, guard = 0;
+    while (tr.trackers.length < target && spawned < 10 && guard < 100 && tr.topCells.length) {
+      guard++;
+      var ci = tr.topCells[Math.floor(jrnd(tr.spawnSeed * 3.1 + guard * 7.7) * tr.topCells.length)];
+      var nx = ci % fw, ny = (ci / fw) | 0;
+      var ok = true;
+      for (i = 0; i < tr.trackers.length; i++) {
+        var ddx = tr.trackers[i].x - nx, ddy = tr.trackers[i].y - ny;
+        if (ddx * ddx + ddy * ddy < 20) { ok = false; break; }
       }
+      if (!ok) continue;
+      spawned++;
+      var t2 = {
+        x: nx, y: ny, sx: nx, sy: ny, age: 0,
+        life: 0.6 + jrnd(ci + tr.spawnSeed) * 1.2,
+        size: 0.6 + jrnd(ci * 1.7 + tr.spawnSeed) * 1.2,
+        id: tr.nextId++, alpha: 0.05
+      };
       tr.trackers.push(t2);
     }
+
+    /* Rebuild a graph from all active trackers so links can span the frame. */
+    var desiredLinks = Math.round((tr.trackers.length * 1.8) * clamp(this.p.trackLines, 0, 100) / 100);
+    tr.links = [];
+    if (desiredLinks > 0 && tr.trackers.length > 1) {
+      var candidates = [];
+      for (i = 0; i < tr.trackers.length; i++) {
+        for (var j = i + 1; j < tr.trackers.length; j++) {
+          var ax = tr.trackers[i].x - tr.trackers[j].x, ay = tr.trackers[i].y - tr.trackers[j].y;
+          var dist2 = ax * ax + ay * ay;
+          /* Prefer a mixture of near and long-range edges. */
+          candidates.push({ a: tr.trackers[i], b: tr.trackers[j], d: dist2 });
+        }
+      }
+      candidates.sort(function (a, b) {
+        var da = Math.abs(a.d - 900), db = Math.abs(b.d - 900);
+        return da - db;
+      });
+      for (i = 0; i < Math.min(desiredLinks, candidates.length); i++) tr.links.push(candidates[i]);
+    }
+
+    tr.prevTime = now;
     tr.spawnSeed++;
   };
 
@@ -735,78 +789,84 @@
     var fw = 72;
     var fh = Math.max(36, Math.round(72 * self._srcH / self._srcW));
     var tr = self._track || (self._track = {});
+    if (!tr.trackers) tr.trackers = [];
+    if (!tr.links) tr.links = [];
     var now = self._time * 1000;
 
     var data = self._sample(fw, fh);
     if (!data) return;
     var gray = new Float32Array(fw * fh);
     for (var i = 0; i < fw * fh; i++)
-      gray[i] = 0.2126*data[i*4] + 0.7152*data[i*4+1] + 0.0722*data[i*4+2];
+      gray[i] = 0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2];
 
     if (tr.fw !== fw || tr.fh !== fh) {
-      tr.trackers = [];
-      tr.links = [];
-      tr.prevGray = null;
-      tr.fw = fw;
-      tr.fh = fh;
+      self._trackReset(tr);
+      tr.fw = fw; tr.fh = fh;
     }
-    if (now - (tr.last || 0) > 33) { self._trackFlow(tr, gray, fw, fh); tr.last = now; }
+    if (now - (tr.last || 0) >= 30) {
+      self._trackFlow(tr, gray, fw, fh);
+      tr.last = now;
+    }
     tr.prevGray = gray;
 
+    /* Track background: 0 = original frame, higher values progressively dim it. */
     var dim = clamp(self.p.trackDim, 0, 100) / 100;
-    ctx.globalAlpha = 1 - dim * 0.9;
+    ctx.save();
+    ctx.globalAlpha = 1 - dim;
     ctx.drawImage(src, 0, 0, W, H);
-    ctx.globalAlpha = 1;
+    ctx.restore();
 
     var sx = W / fw, sy = H / fh;
-
     for (i = 0; i < tr.trackers.length; i++) {
       var q = tr.trackers[i];
-      q.sx += (q.x - q.sx) * 0.5;
-      q.sy += (q.y - q.sy) * 0.5;
+      q.sx += (q.x - q.sx) * 0.42;
+      q.sy += (q.y - q.sy) * 0.42;
     }
 
-    // Линии-связи (свечение, индивидуальная прозрачность)
-    var lineA = clamp(self.p.trackLines, 0, 100) / 100;
-    var maxLinks = Math.round(tr.links.length * lineA);
+    /* Connections: thin, long and luminous. */
     ctx.save();
     ctx.lineWidth = 1;
-    ctx.shadowColor = "rgba(190,235,255,0.9)";
-    ctx.shadowBlur = 5;
-    for (i = 0; i < maxLinks; i++) {
+    ctx.shadowColor = "rgba(170,225,255,0.8)";
+    ctx.shadowBlur = 4;
+    ctx.strokeStyle = "rgba(225,245,255,0.78)";
+    var lineA = clamp(self.p.trackLines, 0, 100) / 100;
+    var lineCount = Math.round(tr.links.length * lineA);
+    for (i = 0; i < lineCount; i++) {
       var L = tr.links[i];
-      var la = Math.min(L.a.alpha, L.b.alpha);
-      if (la < 0.05) continue;
-      ctx.globalAlpha = la * 0.6;
-      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+      if (!L || !L.a || !L.b) continue;
+      var la = Math.min(L.a.alpha || 0, L.b.alpha || 0);
+      if (la < 0.03) continue;
+      ctx.globalAlpha = la * 0.62;
       ctx.beginPath();
-      ctx.moveTo(L.a.sx*sx, L.a.sy*sy);
-      ctx.lineTo(L.b.sx*sx, L.b.sy*sy);
+      ctx.moveTo(L.a.sx * sx, L.a.sy * sy);
+      ctx.lineTo(L.b.sx * sx, L.b.sy * sy);
       ctx.stroke();
     }
     ctx.restore();
 
-    // Рамки + hex-подписи
-    var base = Math.max(6, W * 0.012);
-    var fs = Math.max(7, Math.round(W * 0.012));
+    var base = Math.max(7, W * 0.011);
+    var fs = Math.max(7, Math.round(W * 0.011));
     ctx.font = "300 " + fs + "px ui-monospace, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
+    var labelA = clamp(self.p.trackLabels, 0, 100) / 100;
     for (i = 0; i < tr.trackers.length; i++) {
       var t = tr.trackers[i];
-      if (t.alpha < 0.03) continue;
+      if (!t || (t.alpha || 0) < 0.025) continue;
       var bw = base * t.size, bh = bw * 1.8;
-      var px = t.sx*sx, py = t.sy*sy;
+      var px = t.sx * sx, py = t.sy * sy;
       ctx.save();
       ctx.globalAlpha = t.alpha;
       ctx.shadowColor = "rgba(120,220,255,0.9)";
-      ctx.shadowBlur = 8;
-      ctx.strokeStyle = "rgba(120,220,255,0.95)";
+      ctx.shadowBlur = 7;
+      ctx.strokeStyle = "rgba(120,220,255,0.96)";
       ctx.lineWidth = 1;
-      ctx.strokeRect(px-bw/2+0.5, py-bh/2+0.5, bw, bh);
+      ctx.strokeRect(px - bw / 2 + 0.5, py - bh / 2 + 0.5, bw, bh);
       ctx.shadowBlur = 0;
-      ctx.fillStyle = "rgba(225,245,255,0.9)";
-      ctx.fillText("0x" + hexLabel(t.id), px+bw/2+3, py+bh/2+fs*0.6);
+      if (jrnd(t.id * 5.17) < labelA) {
+        ctx.fillStyle = "rgba(225,245,255,0.92)";
+        ctx.fillText("0x" + hexLabel(t.id), px + bw / 2 + 3, py + bh / 2 + fs * 0.55);
+      }
       ctx.restore();
     }
 
